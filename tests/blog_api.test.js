@@ -1,21 +1,41 @@
 const mongoose = require('mongoose')
+const bcrypt = require('bcrypt')
 const supertest = require('supertest')
 const helper = require('./test_helper')
 const app = require('../app')
 const api = supertest(app)
 
 const Blog = require('../models/blog')
+const User = require('../models/user')
 
 beforeEach(async () => {
+  // Reset blogs
   await Blog.deleteMany({})
 
   const blogObjects = helper.initialBlogs
     .map((blog) => new Blog(blog))
 
-  const promiseArray = blogObjects
+  const promiseArrayBlogs = blogObjects
     .map((blog) => blog.save())
 
-  await Promise.all(promiseArray)
+  await Promise.all(promiseArrayBlogs)
+
+  // Reset users
+  await User.deleteMany({})
+
+  helper.initialUsers
+    .forEach(async (user) => {
+      const saltRounds = 10
+      const passwordHash = await bcrypt.hash(user.password, saltRounds)
+
+      const userObject = new User({
+        name: user.name,
+        username: user.username,
+        passwordHash
+      })
+
+      await userObject.save()
+    })
 })
 
 describe('when there is initially some blogs saved', () => {
@@ -82,10 +102,26 @@ describe('addition of a new blog', () => {
       url: 'some url',
       likes: 10
     }
+
+    const user = {
+      username: 'root',
+      password: 'root'
+    }
+
+    // const response = await api
+    //   .post('/api/login')
+    //   .send(user)
+
+    // const token = response.body.token
+
+    // console.log('respone', response.body)
+
+    const token = await helper.getToken(user)
   
     await api
       .post('/api/blogs')
       .send(blog)
+      .auth(token, { type: 'bearer' })
       .expect(201)
       .expect('Content-Type', /application\/json/)
   
@@ -123,6 +159,23 @@ describe('addition of a new blog', () => {
     const blogsAtEnd = await helper.blogsInDb()
     expect(blogsAtEnd).toHaveLength(helper.initialBlogs.length)
   })
+
+  test('fails with statuscode 401 if token is not provided', async () => {
+    const blog = {
+      title: 'new Title',
+      author: 'Dookie',
+      url: 'some url',
+      likes: 10
+    }
+  
+    await api
+      .post('/api/blogs')
+      .send(blog)
+      .auth('sometokne', { type: 'bearer' })
+      .expect(401)
+      .expect('Content-Type', /application\/json/)
+  })
+  
 })
 
 describe('deletion of a blog', () => {
@@ -204,15 +257,6 @@ describe('editing a blog', () => {
       .expect(404)
   })
 })
-
-
-
-
-
-
-
-
-
 
 afterAll(() => {
   mongoose.connection.close()
