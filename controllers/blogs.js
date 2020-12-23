@@ -38,7 +38,12 @@ blogsRouter.post('/', async (request, response) => {
     user: user._id
   })
 
-  const savedBlog = await blog.save()
+  let savedBlog = await blog.save()
+  // For the frontend to find immediately who the creator is before sending it
+  savedBlog = await Blog
+    .findById(savedBlog.id)
+    .populate('user', { username: 1, name: 1, id: 1})
+    
   user.blogs = user.blogs.concat(savedBlog._id)
   await user.save()
   response.status(201).json(savedBlog)
@@ -59,8 +64,6 @@ blogsRouter.delete('/:id', async (request, response) => {
   response.status(401).json({
     error: 'access denied due to wrong authorization credentials'
   })
-  
-
 })
 
 blogsRouter.put('/:id', async (request, response) => {
@@ -72,7 +75,9 @@ blogsRouter.put('/:id', async (request, response) => {
     likes: body.likes
   }
 
-  const updatedBlog = await Blog.findByIdAndUpdate(request.params.id, blog, { new: true })
+  const updatedBlog = await Blog
+    .findByIdAndUpdate(request.params.id, blog, { new: true })
+    .populate('user', { username: 1, name: 1, id: 1 })
   if(updatedBlog){
     response.json(updatedBlog)
   } else {
